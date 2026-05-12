@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, StatusBar, Modal, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../api/axios';
 
 const BookingHistoryScreen = ({ navigation }) => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reviewModal, setReviewModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // Add listener to refresh when screen comes into focus
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchBookings();
-    });
+    const unsubscribe = navigation.addListener('focus', () => { fetchBookings(); });
     return unsubscribe;
   }, [navigation]);
 
@@ -20,102 +23,132 @@ const BookingHistoryScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const res = await api.get('/bookings/my');
+      if (res.data.success) setBookings(res.data.data);
+    } catch (e) { console.log(e); }
+    finally { setLoading(false); }
+  };
+
+  const handleReview = async () => {
+    if (!selectedBooking) return;
+    setSubmitting(true);
+    try {
+      const res = await api.post('/reviews', {
+        venue_id: selectedBooking.venue_id,
+        booking_id: selectedBooking.id,
+        rating,
+        comment
+      });
       if (res.data.success) {
-        setBookings(res.data.data);
+        Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá!');
+        setReviewModal(false);
+        fetchBookings();
       }
-    } catch (error) {
-      console.log('Error fetching bookings:', error);
+    } catch (e) {
+      Alert.alert('Lỗi', e.response?.data?.message || 'Gửi đánh giá thất bại');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusInfo = (status) => {
     switch (status) {
-      case 'pending': return { color: '#D97706', bg: '#FEF3C7', label: 'Chờ duyệt' };
-      case 'confirmed': return { color: '#2563EB', bg: '#DBEAFE', label: 'Đã xác nhận' };
-      case 'completed': return { color: '#10B981', bg: '#D1FAE5', label: 'Hoàn thành' };
-      case 'cancelled': return { color: '#EF4444', bg: '#FEE2E2', label: 'Đã hủy' };
-      default: return { color: '#6B7280', bg: '#F3F4F6', label: 'Không rõ' };
+      case 'pending': return { label: 'Chờ thanh toán', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.1)' };
+      case 'confirmed': return { label: 'Đã xác nhận', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.1)' };
+      case 'completed': return { label: 'Hoàn thành', color: '#10B981', bg: 'rgba(16, 185, 129, 0.1)' };
+      case 'cancelled': return { label: 'Đã hủy', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.1)' };
+      default: return { label: 'Không rõ', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)' };
     }
   };
-
-  const formatTime = (time) => time ? time.slice(0, 5) : '';
 
   const renderBookingCard = ({ item }) => {
-    const statusInfo = getStatusColor(item.status);
+    const status = getStatusInfo(item.status);
     const coverUrl = item.venue_image 
       ? item.venue_image.replace('localhost', '192.168.1.107') 
-      : 'https://via.placeholder.com/100?text=Sân';
+      : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=200';
 
     return (
       <TouchableOpacity 
         style={styles.card}
+        activeOpacity={0.9}
         onPress={() => {
           if (item.status === 'pending') {
             navigation.navigate('PaymentQR', { 
               bookingData: { 
                 payment: { 
                   amount: item.total_price, 
-                  bank_name: 'Vietinbank', // Should ideally come from API, fallback for demo
+                  bank_name: 'Vietinbank',
                   bank_account: '0852522818',
                   transfer_content: 'DAT SAN ' + item.booking_code,
-                  qrImageBase64: '' // Handled inside or refetch
+                  qrImageBase64: '' 
                 } 
               } 
             });
           }
         }}
-        disabled={item.status !== 'pending'}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.bookingCode}>#{item.booking_code}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-            <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
+          <View style={styles.codeBox}>
+            <Text style={styles.bookingCode}>#{item.booking_code}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
           </View>
         </View>
 
         <View style={styles.cardBody}>
           <Image source={{ uri: coverUrl }} style={styles.venueImage} />
-          <View style={styles.bookingInfo}>
+          <View style={styles.infoCol}>
             <Text style={styles.venueName} numberOfLines={1}>{item.venue_name}</Text>
-            <Text style={styles.courtName}>{item.court_name} ({item.sport_type})</Text>
+            <Text style={styles.courtName}>{item.court_name}</Text>
             <View style={styles.timeRow}>
-              <Ionicons name="calendar-outline" size={14} color="#6B7280" />
+              <Ionicons name="calendar-outline" size={14} color="#64748B" />
               <Text style={styles.timeText}>{item.slot_date}</Text>
-            </View>
-            <View style={styles.timeRow}>
-              <Ionicons name="time-outline" size={14} color="#6B7280" />
-              <Text style={styles.timeText}>{formatTime(item.start_time)} - {formatTime(item.end_time)}</Text>
+              <Ionicons name="time-outline" size={14} color="#64748B" style={{ marginLeft: 12 }} />
+              <Text style={styles.timeText}>{item.start_time.slice(0,5)} - {item.end_time.slice(0,5)}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.totalLabel}>Tổng tiền:</Text>
+          <Text style={styles.totalLabel}>Tổng tiền</Text>
           <Text style={styles.totalValue}>{new Intl.NumberFormat('vi-VN').format(item.total_price)}đ</Text>
         </View>
-
+        
         {item.status === 'pending' && (
-          <View style={styles.actionRow}>
-            <Text style={styles.actionText}>Chạm để xem lại mã QR thanh toán</Text>
-            <Ionicons name="chevron-forward" size={16} color="#10B981" />
-          </View>
+          <LinearGradient colors={['rgba(16, 185, 129, 0.1)', 'transparent']} style={styles.actionPrompt}>
+             <Text style={styles.actionText}>Chạm để thanh toán ngay</Text>
+             <Ionicons name="arrow-forward" size={16} color="#10B981" />
+          </LinearGradient>
+        )}
+
+        {item.status === 'completed' && !item.is_reviewed && (
+          <TouchableOpacity 
+            style={styles.reviewBtn} 
+            onPress={() => {
+              setSelectedBooking(item);
+              setReviewModal(true);
+            }}
+          >
+            <Text style={styles.reviewBtnText}>Viết đánh giá</Text>
+          </TouchableOpacity>
         )}
       </TouchableOpacity>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Lịch sử đặt sân</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#1E293B', '#0F172A']} style={styles.headerGradient}>
+        <SafeAreaView edges={['top']}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Lịch sử đặt chỗ</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
       {loading ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#10B981" />
-        </View>
+        <View style={styles.center}><ActivityIndicator size="large" color="#10B981" /></View>
       ) : (
         <FlatList
           data={bookings}
@@ -124,53 +157,103 @@ const BookingHistoryScreen = ({ navigation }) => {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="receipt-outline" size={60} color="#D1D5DB" />
-              <Text style={styles.emptyText}>Bạn chưa có đơn đặt sân nào.</Text>
-              <TouchableOpacity style={styles.bookNowBtn} onPress={() => navigation.navigate('HomeTab')}>
-                <Text style={styles.bookNowText}>Đặt sân ngay</Text>
+            <View style={styles.empty}>
+              <Ionicons name="receipt-outline" size={80} color="#1E293B" />
+              <Text style={styles.emptyText}>Bạn chưa có đơn đặt chỗ nào</Text>
+              <TouchableOpacity style={styles.bookBtn} onPress={() => navigation.navigate('HomeTab')}>
+                <LinearGradient colors={['#10B981', '#059669']} style={styles.bookBtnInner}>
+                   <Text style={styles.bookBtnText}>Khám phá ngay</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           }
         />
       )}
-    </SafeAreaView>
+
+      <Modal visible={reviewModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Đánh giá trải nghiệm</Text>
+            <Text style={styles.modalVenue}>{selectedBooking?.venue_name}</Text>
+            
+            <View style={styles.ratingRow}>
+              {[1,2,3,4,5].map(s => (
+                <TouchableOpacity key={s} onPress={() => setRating(s)}>
+                  <Ionicons name={s <= rating ? "star" : "star-outline"} size={36} color="#FBBF24" />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Chia sẻ cảm nhận của bạn về sân..."
+              placeholderTextColor="#64748B"
+              multiline
+              numberOfLines={4}
+              value={comment}
+              onChangeText={setComment}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setReviewModal(false)}>
+                <Text style={styles.cancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitBtn} onPress={handleReview} disabled={submitting}>
+                {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitText}>Gửi đánh giá</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { padding: 15, alignItems: 'center', backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: 15, paddingBottom: 30 },
-  
-  card: { backgroundColor: '#FFF', borderRadius: 12, marginBottom: 15, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  bookingCode: { fontSize: 14, fontWeight: 'bold', color: '#374151' },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  statusText: { fontSize: 12, fontWeight: 'bold' },
-  
-  cardBody: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  venueImage: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#E5E7EB' },
-  bookingInfo: { flex: 1, marginLeft: 15 },
-  venueName: { fontSize: 16, fontWeight: 'bold', color: '#111827', marginBottom: 2 },
-  courtName: { fontSize: 13, color: '#4B5563', marginBottom: 8 },
-  timeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  timeText: { fontSize: 13, color: '#6B7280', marginLeft: 6 },
-  
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#FAFAFA' },
-  totalLabel: { fontSize: 14, color: '#4B5563' },
-  totalValue: { fontSize: 16, fontWeight: 'bold', color: '#10B981' },
-  
-  actionRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, backgroundColor: '#ECFDF5' },
-  actionText: { fontSize: 13, color: '#10B981', fontWeight: '500', marginRight: 5 },
-  
-  emptyContainer: { alignItems: 'center', marginTop: 100 },
-  emptyText: { color: '#6B7280', fontSize: 16, marginTop: 15, marginBottom: 20 },
-  bookNowBtn: { backgroundColor: '#10B981', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  bookNowText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
+  container: { flex: 1, backgroundColor: '#0F172A' },
+  headerGradient: { borderBottomLeftRadius: 35, borderBottomRightRadius: 35, paddingBottom: 25 },
+  header: { paddingHorizontal: 20, paddingTop: 10, alignItems: 'center' },
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  listContent: { padding: 25, paddingBottom: 100 },
+  card: { backgroundColor: '#1E293B', borderRadius: 25, marginBottom: 20, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.03)' },
+  codeBox: { backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  bookingCode: { color: '#CBD5E1', fontSize: 12, fontWeight: 'bold' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusText: { fontSize: 11, fontWeight: 'bold' },
+  cardBody: { flexDirection: 'row', padding: 18 },
+  venueImage: { width: 70, height: 70, borderRadius: 15, backgroundColor: '#0F172A' },
+  infoCol: { flex: 1, marginLeft: 15 },
+  venueName: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  courtName: { color: '#94A3B8', fontSize: 13, marginBottom: 8 },
+  timeRow: { flexDirection: 'row', alignItems: 'center' },
+  timeText: { color: '#64748B', fontSize: 12, marginLeft: 6 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, backgroundColor: 'rgba(255,255,255,0.01)' },
+  totalLabel: { color: '#64748B', fontSize: 13 },
+  totalValue: { color: '#10B981', fontSize: 18, fontWeight: 'bold' },
+  actionPrompt: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  actionText: { color: '#10B981', fontSize: 13, fontWeight: 'bold', marginRight: 8 },
+  reviewBtn: { backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.03)' },
+  reviewBtnText: { color: '#10B981', fontWeight: 'bold', fontSize: 13 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#1E293B', borderTopLeftRadius: 35, borderTopRightRadius: 35, padding: 30 },
+  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
+  modalVenue: { color: '#94A3B8', fontSize: 14, textAlign: 'center', marginTop: 8, marginBottom: 25 },
+  ratingRow: { flexDirection: 'row', justifyContent: 'center', gap: 15, marginBottom: 25 },
+  modalInput: { backgroundColor: '#0F172A', borderRadius: 20, padding: 20, color: '#FFF', height: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 25 },
+  modalButtons: { flexDirection: 'row', gap: 15 },
+  cancelBtn: { flex: 1, paddingVertical: 15, alignItems: 'center', borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.05)' },
+  cancelText: { color: '#94A3B8', fontWeight: 'bold' },
+  submitBtn: { flex: 2, paddingVertical: 15, alignItems: 'center', borderRadius: 15, backgroundColor: '#10B981' },
+  submitText: { color: '#FFF', fontWeight: 'bold' },
+
+  empty: { flex: 1, alignItems: 'center', marginTop: 100 },
+  emptyText: { color: '#475569', fontSize: 16, marginTop: 20, marginBottom: 30 },
+  bookBtn: { borderRadius: 15, overflow: 'hidden' },
+  bookBtnInner: { paddingHorizontal: 30, paddingVertical: 12 },
+  bookBtnText: { color: '#FFF', fontWeight: 'bold' }
 });
 
 export default BookingHistoryScreen;

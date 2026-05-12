@@ -24,6 +24,8 @@ router.post('/', authenticate, (req, res) => {
         // Update venue avg_rating
         db.query('UPDATE venues SET avg_rating = (SELECT AVG(rating) FROM reviews WHERE venue_id = ? AND is_hidden = 0), total_reviews = (SELECT COUNT(*) FROM reviews WHERE venue_id = ? AND is_hidden = 0) WHERE id = ?',
           [venue_id, venue_id, venue_id], () => {});
+        // Mark booking as reviewed
+        db.query('UPDATE bookings SET is_reviewed = 1 WHERE id = ?', [booking_id], () => {});
         res.status(201).json({ success: true, message: 'Cảm ơn bạn đã đánh giá!', reviewId: result.insertId });
       }
     );

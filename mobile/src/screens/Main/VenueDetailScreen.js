@@ -12,8 +12,26 @@ const VenueDetailScreen = ({ route, navigation }) => {
   const { venueId } = route.params;
   const [venue, setVenue] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isFavorite, setIsFavorite] = useState(false);
 
-  useEffect(() => { fetchVenueDetail(); }, [venueId]);
+  useEffect(() => { 
+    fetchVenueDetail();
+    checkFavorite();
+  }, [venueId]);
+
+  const checkFavorite = async () => {
+    try {
+      const res = await api.get(`/favorites/check/${venueId}`);
+      setIsFavorite(res.data.isFavorite);
+    } catch (e) {}
+  };
+
+  const toggleFavorite = async () => {
+    try {
+      const res = await api.post(`/favorites/${venueId}`);
+      setIsFavorite(res.data.isFavorite);
+    } catch (e) {}
+  };
 
   const fetchVenueDetail = async () => {
     try {
@@ -63,6 +81,9 @@ const VenueDetailScreen = ({ route, navigation }) => {
           <LinearGradient colors={['rgba(15,23,42,0.6)', 'transparent']} style={styles.topOverlay} />
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.favBtn} onPress={toggleFavorite}>
+            <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? "#F43F5E" : "#FFF"} />
           </TouchableOpacity>
         </View>
 
@@ -153,6 +174,7 @@ const styles = StyleSheet.create({
   mainImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 100 },
   backBtn: { position: 'absolute', top: 50, left: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', alignItems: 'center' },
+  favBtn: { position: 'absolute', top: 50, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'center', alignItems: 'center' },
   content: { padding: 25, marginTop: -30, backgroundColor: '#0F172A', borderTopLeftRadius: 35, borderTopRightRadius: 35 },
   venueName: { fontSize: 26, fontWeight: 'bold', color: '#FFF', marginBottom: 10 },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },

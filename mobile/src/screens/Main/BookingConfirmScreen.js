@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import api from '../../api/axios';
 
 const BookingConfirmScreen = ({ route, navigation }) => {
@@ -43,9 +44,7 @@ const BookingConfirmScreen = ({ route, navigation }) => {
         promo_code: promoData ? promoData.code : null,
         note: note || null
       });
-
       if (res.data.success) {
-        // Navigate to QR Payment screen
         navigation.replace('PaymentQR', { bookingData: res.data.data });
       }
     } catch (error) {
@@ -55,37 +54,42 @@ const BookingConfirmScreen = ({ route, navigation }) => {
     }
   };
 
-  const formatTime = (timeStr) => timeStr.slice(0, 5);
-
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Xác nhận đặt sân</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#1E293B', '#0F172A']} style={styles.headerGradient}>
+        <SafeAreaView edges={['top']}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Ionicons name="chevron-back" size={28} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Xác nhận đặt chỗ</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Thông tin sân</Text>
           <View style={styles.card}>
-            <View style={styles.row}>
-              <Ionicons name="location" size={20} color="#10B981" />
-              <Text style={styles.venueName}>{venue.name}</Text>
+            <View style={styles.venueRow}>
+              <View style={styles.iconBox}><Ionicons name="location" size={20} color="#10B981" /></View>
+              <View>
+                <Text style={styles.venueName}>{venue.name}</Text>
+                <Text style={styles.courtName}>{court.name} • {court.sport_type}</Text>
+              </View>
             </View>
-            <Text style={styles.courtName}>{court.name} ({court.sport_type})</Text>
-            
             <View style={styles.divider} />
-            
-            <View style={styles.rowBetween}>
-              <Text style={styles.label}>Ngày chơi:</Text>
-              <Text style={styles.value}>{slot.slot_date}</Text>
-            </View>
-            <View style={styles.rowBetween}>
-              <Text style={styles.label}>Thời gian:</Text>
-              <Text style={styles.value}>{formatTime(slot.start_time)} - {formatTime(slot.end_time)}</Text>
+            <View style={styles.infoRow}>
+              <View style={styles.infoCol}>
+                <Text style={styles.label}>Ngày chơi</Text>
+                <Text style={styles.value}>{slot.slot_date}</Text>
+              </View>
+              <View style={styles.infoCol}>
+                <Text style={styles.label}>Thời gian</Text>
+                <Text style={styles.value}>{slot.start_time.slice(0,5)} - {slot.end_time.slice(0,5)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -95,29 +99,29 @@ const BookingConfirmScreen = ({ route, navigation }) => {
           <View style={styles.promoContainer}>
             <TextInput
               style={styles.promoInput}
-              placeholder="Nhập mã (VD: WELCOME20)"
+              placeholder="Nhập mã ưu đãi..."
+              placeholderTextColor="#64748B"
               value={promoCode}
               onChangeText={setPromoCode}
               autoCapitalize="characters"
             />
-            <TouchableOpacity 
-              style={styles.applyBtn} 
-              onPress={handleVerifyPromo}
-              disabled={verifyingPromo}
-            >
+            <TouchableOpacity style={styles.applyBtn} onPress={handleVerifyPromo} disabled={verifyingPromo}>
               {verifyingPromo ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.applyText}>Áp dụng</Text>}
             </TouchableOpacity>
           </View>
           {promoData && (
-            <Text style={styles.promoSuccess}>Đã áp dụng mã: giảm {promoData.discount_pct ? `${promoData.discount_pct}%` : `${new Intl.NumberFormat('vi-VN').format(promoData.discount_amt)}đ`}</Text>
+            <Text style={styles.promoSuccess}>
+              Giảm {promoData.discount_pct ? `${promoData.discount_pct}%` : `${new Intl.NumberFormat('vi-VN').format(promoData.discount_amt)}đ`}
+            </Text>
           )}
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ghi chú cho chủ sân</Text>
+          <Text style={styles.sectionTitle}>Ghi chú (Tùy chọn)</Text>
           <TextInput
             style={styles.noteInput}
-            placeholder="Ví dụ: Cần mượn thêm bóng..."
+            placeholder="Ví dụ: Cần mượn thêm vợt, nước uống..."
+            placeholderTextColor="#64748B"
             multiline
             numberOfLines={3}
             value={note}
@@ -126,79 +130,79 @@ const BookingConfirmScreen = ({ route, navigation }) => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thanh toán</Text>
+          <Text style={styles.sectionTitle}>Chi tiết thanh toán</Text>
           <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.label}>Tạm tính:</Text>
-              <Text style={styles.label}>{new Intl.NumberFormat('vi-VN').format(basePrice)}đ</Text>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Tạm tính</Text>
+              <Text style={styles.paymentValue}>{new Intl.NumberFormat('vi-VN').format(basePrice)}đ</Text>
             </View>
             {discountAmt > 0 && (
-              <View style={styles.rowBetween}>
-                <Text style={styles.label}>Giảm giá:</Text>
-                <Text style={styles.discount}>-{new Intl.NumberFormat('vi-VN').format(discountAmt)}đ</Text>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Giảm giá</Text>
+                <Text style={styles.discountValue}>-{new Intl.NumberFormat('vi-VN').format(discountAmt)}đ</Text>
               </View>
             )}
             <View style={styles.divider} />
-            <View style={styles.rowBetween}>
-              <Text style={styles.totalLabel}>Tổng cộng:</Text>
+            <View style={styles.paymentRow}>
+              <Text style={styles.totalLabel}>Tổng cộng</Text>
               <Text style={styles.totalValue}>{new Intl.NumberFormat('vi-VN').format(finalPrice)}đ</Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Bar */}
-      <View style={styles.bottomBar}>
-        <View style={styles.priceInfo}>
-          <Text style={styles.totalLabel}>Tổng thanh toán</Text>
-          <Text style={styles.totalValue}>{new Intl.NumberFormat('vi-VN').format(finalPrice)}đ</Text>
+      <View style={styles.footer}>
+        <View>
+          <Text style={styles.footerLabel}>Tổng thanh toán</Text>
+          <Text style={styles.footerValue}>{new Intl.NumberFormat('vi-VN').format(finalPrice)}đ</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.continueBtn}
-          disabled={loading}
-          onPress={handlePayment}
-        >
-          {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.continueText}>Thanh toán ngay</Text>}
+        <TouchableOpacity style={styles.payBtn} disabled={loading} onPress={handlePayment}>
+          <LinearGradient colors={['#10B981', '#059669']} style={styles.payBtnInner}>
+            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.payBtnText}>Đặt sân ngay</Text>}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  container: { flex: 1, backgroundColor: '#0F172A' },
+  headerGradient: { borderBottomLeftRadius: 35, borderBottomRightRadius: 35, paddingBottom: 25 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  
-  section: { paddingHorizontal: 20, paddingTop: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#374151', marginBottom: 10 },
-  
-  card: { backgroundColor: '#FFF', padding: 15, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
-  venueName: { marginLeft: 8, fontSize: 16, fontWeight: 'bold', color: '#111827' },
-  courtName: { marginLeft: 28, fontSize: 14, color: '#4B5563', marginBottom: 10 },
-  divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 10 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  label: { fontSize: 14, color: '#6B7280' },
-  value: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', flex: 1, textAlign: 'center' },
+  scrollContent: { padding: 25, paddingBottom: 120 },
+  section: { marginBottom: 25 },
+  sectionTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 15 },
+  card: { backgroundColor: '#1E293B', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  venueRow: { flexDirection: 'row', alignItems: 'center' },
+  iconBox: { width: 45, height: 45, borderRadius: 12, backgroundColor: 'rgba(16, 185, 129, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  venueName: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  courtName: { color: '#64748B', fontSize: 13, marginTop: 4 },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginVertical: 15 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  infoCol: { flex: 1 },
+  label: { color: '#64748B', fontSize: 12, marginBottom: 6 },
+  value: { color: '#CBD5E1', fontSize: 15, fontWeight: 'bold' },
   promoContainer: { flexDirection: 'row' },
-  promoInput: { flex: 1, backgroundColor: '#FFF', height: 48, borderRadius: 8, paddingHorizontal: 15, borderWidth: 1, borderColor: '#D1D5DB' },
-  applyBtn: { backgroundColor: '#10B981', justifyContent: 'center', paddingHorizontal: 20, borderRadius: 8, marginLeft: 10 },
+  promoInput: { flex: 1, backgroundColor: '#1E293B', height: 55, borderRadius: 15, paddingHorizontal: 20, color: '#FFF', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  applyBtn: { backgroundColor: '#10B981', justifyContent: 'center', paddingHorizontal: 20, borderRadius: 15, marginLeft: 12 },
   applyText: { color: '#FFF', fontWeight: 'bold' },
-  promoSuccess: { color: '#10B981', fontSize: 12, marginTop: 5, fontWeight: '500' },
-  
-  noteInput: { backgroundColor: '#FFF', borderRadius: 8, padding: 15, borderWidth: 1, borderColor: '#D1D5DB', textAlignVertical: 'top' },
-  
-  discount: { fontSize: 14, color: '#EF4444', fontWeight: '600' },
-  totalLabel: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
-  totalValue: { fontSize: 18, fontWeight: 'bold', color: '#10B981' },
-  
-  bottomBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  priceInfo: { flex: 1 },
-  continueBtn: { backgroundColor: '#10B981', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 8, minWidth: 150, alignItems: 'center' },
-  continueText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+  promoSuccess: { color: '#10B981', fontSize: 13, marginTop: 8, fontWeight: '600' },
+  noteInput: { backgroundColor: '#1E293B', borderRadius: 15, padding: 15, color: '#FFF', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', textAlignVertical: 'top' },
+  paymentRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  paymentLabel: { color: '#94A3B8', fontSize: 14 },
+  paymentValue: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+  discountValue: { color: '#EF4444', fontSize: 14, fontWeight: 'bold' },
+  totalLabel: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  totalValue: { color: '#10B981', fontSize: 20, fontWeight: 'bold' },
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#1E293B', paddingHorizontal: 25, paddingVertical: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  footerLabel: { color: '#94A3B8', fontSize: 12, marginBottom: 4 },
+  footerValue: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
+  payBtn: { borderRadius: 18, overflow: 'hidden' },
+  payBtnInner: { paddingHorizontal: 30, paddingVertical: 15, alignItems: 'center' },
+  payBtnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }
 });
 
 export default BookingConfirmScreen;

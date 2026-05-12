@@ -46,9 +46,13 @@ const HomeScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    fetchVenues();
-    fetchNearby();
-  }, [userLocation, activeCategory, activeArea]);
+    const timer = setTimeout(() => {
+      if (userLocation || activeCategory !== 'Tất cả' || activeArea !== 'Gần tôi' || searchText) {
+        fetchVenues();
+      }
+    }, 500); // Debounce search
+    return () => clearTimeout(timer);
+  }, [userLocation, activeCategory, activeArea, searchText]);
 
   const fetchNearby = async () => {
     try {
@@ -64,10 +68,11 @@ const HomeScreen = ({ navigation }) => {
   const fetchVenues = async () => {
     setLoading(true);
     try {
-      let query = '/venues?limit=50';
+      let query = '/venues?limit=30';
       if (activeCategory !== 'Tất cả') query += `&sport_type=${encodeURIComponent(activeCategory)}`;
       if (activeArea === 'Hà Nội') query += '&city=Hà Nội';
       if (activeArea === 'Hồ Chí Minh') query += '&city=Hồ Chí Minh';
+      if (searchText) query += `&search=${encodeURIComponent(searchText)}`;
       if (userLocation) {
         query += `&lat=${userLocation.latitude}&lng=${userLocation.longitude}`;
         if (activeArea === 'Gần tôi') query += '&sort=nearest';
@@ -220,12 +225,7 @@ const HomeScreen = ({ navigation }) => {
     );
   };
 
-  const filteredVenues = searchText
-    ? allVenues.filter(v =>
-        v.name?.toLowerCase().includes(searchText.toLowerCase()) ||
-        v.address?.toLowerCase().includes(searchText.toLowerCase())
-      )
-    : allVenues;
+  const filteredVenues = allVenues;
 
   return (
     <View style={styles.container}>
@@ -241,6 +241,13 @@ const HomeScreen = ({ navigation }) => {
                 {userInfo?.name || 'Vận động viên'}
               </Text>
             </View>
+            <TouchableOpacity 
+              style={styles.headerIcon} 
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#FFF" />
+              <View style={styles.badge} />
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.profileBtn}
               onPress={() => navigation.navigate('ProfileTab')}
@@ -264,7 +271,7 @@ const HomeScreen = ({ navigation }) => {
             <TextInput
               style={styles.searchInput}
               placeholder="Bạn muốn chơi ở đâu hôm nay?"
-              placeholderTextColor="#475569"
+              placeholderTextColor="#64748B"
               value={searchText}
               onChangeText={setSearchText}
             />
@@ -422,6 +429,8 @@ const styles = StyleSheet.create({
     borderColor: '#10B981',
     overflow: 'hidden',
   },
+  headerIcon: { width: 46, height: 46, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 23, marginRight: 12 },
+  badge: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', borderWidth: 2, borderColor: '#1E293B' },
   avatar: { width: '100%', height: '100%' },
 
   /* Search */

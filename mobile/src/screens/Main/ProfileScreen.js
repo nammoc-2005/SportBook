@@ -63,8 +63,8 @@ const ProfileScreen = ({ navigation }) => {
       ? `http://192.168.1.107:5000${userInfo.avatar}`
       : 'https://ui-avatars.com/api/?name=' + (userInfo?.name || 'User') + '&background=10B981&color=fff';
 
-  const ActionCard = ({ icon, label, color }) => (
-    <TouchableOpacity style={styles.actionCard} activeOpacity={0.8}>
+  const ActionCard = ({ icon, label, color, onPress }) => (
+    <TouchableOpacity style={styles.actionCard} activeOpacity={0.8} onPress={onPress}>
       <LinearGradient colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)']} style={styles.actionInner}>
         <Ionicons name={icon} size={26} color={color} />
         <Text style={styles.actionLabel}>{label}</Text>
@@ -108,9 +108,9 @@ const ProfileScreen = ({ navigation }) => {
         </LinearGradient>
 
         <View style={styles.gridContainer}>
-          <ActionCard icon="receipt" label="Giao dịch" color="#10B981" />
-          <ActionCard icon="heart" label="Yêu thích" color="#F43F5E" />
-          <ActionCard icon="notifications" label="Thông báo" color="#3B82F6" />
+          <ActionCard icon="receipt" label="Giao dịch" color="#10B981" onPress={() => navigation.navigate('BookingHistory')} />
+          <ActionCard icon="heart" label="Yêu thích" color="#F43F5E" onPress={() => navigation.navigate('Favorites')} />
+          <ActionCard icon="notifications" label="Thông báo" color="#3B82F6" onPress={() => navigation.navigate('Notifications')} />
           <ActionCard icon="gift" label="Quà tặng" color="#F59E0B" />
         </View>
 

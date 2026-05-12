@@ -23,6 +23,8 @@ import BookingHistoryScreen from '../screens/Main/BookingHistoryScreen';
 import ProfileScreen from '../screens/Main/ProfileScreen';
 import MapScreen from '../screens/Main/MapScreen';
 import FeaturedScreen from '../screens/Main/FeaturedScreen';
+import NotificationScreen from '../screens/Main/NotificationScreen';
+import FavoriteScreen from '../screens/Main/FavoriteScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -137,6 +139,8 @@ const MainStack = () => (
     <Stack.Screen name="BookingConfirm" component={BookingConfirmScreen} />
     <Stack.Screen name="PaymentQR" component={PaymentQRScreen} />
     <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} />
+    <Stack.Screen name="Notifications" component={NotificationScreen} />
+    <Stack.Screen name="Favorites" component={FavoriteScreen} />
   </Stack.Navigator>
 );
 
