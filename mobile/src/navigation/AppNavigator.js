@@ -12,6 +12,8 @@ import PhoneInputScreen from '../screens/Auth/PhoneInputScreen';
 import OTPScreen from '../screens/Auth/OTPScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
 import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
+import VerifyEmailScreen from '../screens/Auth/VerifyEmailScreen';
+import VerifyPhoneScreen from '../screens/Auth/VerifyPhoneScreen';
 
 // Main Screens
 import HomeScreen from '../screens/Main/HomeScreen';
@@ -25,6 +27,12 @@ import MapScreen from '../screens/Main/MapScreen';
 import FeaturedScreen from '../screens/Main/FeaturedScreen';
 import NotificationScreen from '../screens/Main/NotificationScreen';
 import FavoriteScreen from '../screens/Main/FavoriteScreen';
+import EditProfileScreen from '../screens/Main/EditProfileScreen';
+import SecurityScreen from '../screens/Main/SecurityScreen';
+import PaymentMethodsScreen from '../screens/Main/PaymentMethodsScreen';
+import SettingsScreen from '../screens/Main/SettingsScreen';
+import OwnerDashboardScreen from '../screens/Main/OwnerDashboardScreen';
+import OwnerVenueDetailScreen from '../screens/Main/OwnerVenueDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -70,12 +78,24 @@ const CustomTabButton = ({ children, onPress }) => (
 const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Screen name="Register" component={RegisterScreen} />
     <Stack.Screen name="PhoneInput" component={PhoneInputScreen} />
     <Stack.Screen name="OTP" component={OTPScreen} />
-    <Stack.Screen name="Register" component={RegisterScreen} />
     <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
   </Stack.Navigator>
 );
+
+const VerificationStack = () => {
+  const { userInfo } = useContext(AuthContext);
+  const initialRoute = userInfo?.email_verified === 0 ? 'VerifyEmail' : 'VerifyPhone';
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
+      <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+      <Stack.Screen name="VerifyPhone" component={VerifyPhoneScreen} />
+    </Stack.Navigator>
+  );
+};
 
 const MainTabs = () => (
   <Tab.Navigator
@@ -134,6 +154,8 @@ const MainTabs = () => (
 const MainStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="MainTabs" component={MainTabs} />
+    <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+    <Stack.Screen name="VerifyPhone" component={VerifyPhoneScreen} />
     <Stack.Screen name="VenueDetail" component={VenueDetailScreen} />
     <Stack.Screen name="BookingSlot" component={BookingSlotScreen} />
     <Stack.Screen name="BookingConfirm" component={BookingConfirmScreen} />
@@ -141,11 +163,17 @@ const MainStack = () => (
     <Stack.Screen name="BookingHistory" component={BookingHistoryScreen} />
     <Stack.Screen name="Notifications" component={NotificationScreen} />
     <Stack.Screen name="Favorites" component={FavoriteScreen} />
+    <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+    <Stack.Screen name="Security" component={SecurityScreen} />
+    <Stack.Screen name="PaymentMethods" component={PaymentMethodsScreen} />
+    <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
+    <Stack.Screen name="OwnerVenueDetail" component={OwnerVenueDetailScreen} />
   </Stack.Navigator>
 );
 
 const AppNavigator = () => {
-  const { isLoading, userToken } = useContext(AuthContext);
+  const { isLoading, userToken, userInfo } = useContext(AuthContext);
 
   if (isLoading) {
     return (
@@ -156,9 +184,15 @@ const AppNavigator = () => {
     );
   }
 
+  let currentStack = <AuthStack />;
+  if (userToken && userInfo) {
+    // Cho phép dùng app ngay; xác thực email/SĐT có thể làm sau trong Cá nhân (giống Alobo)
+    currentStack = <MainStack />;
+  }
+
   return (
     <NavigationContainer theme={AppTheme}>
-      {userToken ? <MainStack /> : <AuthStack />}
+      {currentStack}
     </NavigationContainer>
   );
 };

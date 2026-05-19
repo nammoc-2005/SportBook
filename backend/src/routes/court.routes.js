@@ -108,22 +108,35 @@ router.post('/:courtId/slots/generate-range', authenticate, requireRole('owner',
     return res.status(400).json({ success: false, message: 'Ngày không hợp lệ' });
   }
 
-  const slots = [];
-  const current = start.clone();
-  while (current.isSameOrBefore(end)) {
-    const dateStr = current.format('YYYY-MM-DD');
-    for (let h = parseInt(start_hour); h < parseInt(end_hour); h++) {
-      slots.push([courtId, dateStr, `${String(h).padStart(2,'0')}:00:00`, `${String(h+1).padStart(2,'0')}:00:00`, 'open', null]);
+  db.query('SELECT c.*, v.owner_id FROM courts c JOIN venues v ON v.id = c.venue_id WHERE c.id = ?', [courtId], (ownerErr, ownerRows) => {
+    if (ownerErr) return res.status(500).json({ success: false, message: 'DB error' });
+    if (!ownerRows.length) return res.status(404).json({ success: false, message: 'Không tìm thấy sân' });
+    if (ownerRows[0].owner_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Không có quyền' });
     }
-    current.add(1, 'day');
-  }
 
-  db.query('INSERT IGNORE INTO time_slots (court_id, slot_date, start_time, end_time, status, price_override) VALUES ?',
-    [slots], (err, result) => {
-      if (err) return res.status(500).json({ success: false, message: 'Tạo slot thất bại' });
-      res.json({ success: true, message: `Đã tạo ${result.affectedRows} slot từ ${start_date} đến ${end_date}` });
+    const slots = [];
+    const current = start.clone();
+    while (current.isSameOrBefore(end)) {
+      const dateStr = current.format('YYYY-MM-DD');
+      for (let h = parseInt(start_hour); h < parseInt(end_hour); h++) {
+        slots.push([courtId, dateStr, `${String(h).padStart(2,'0')}:00:00`, `${String(h+1).padStart(2,'0')}:00:00`, 'open', null]);
+      }
+      current.add(1, 'day');
     }
-  );
+
+    db.query("DELETE FROM time_slots WHERE court_id = ? AND slot_date BETWEEN ? AND ? AND status = 'open'",
+      [courtId, start_date, end_date], (deleteErr) => {
+      if (deleteErr) return res.status(500).json({ success: false, message: 'Không thể làm mới slot trống' });
+
+      db.query('INSERT INTO time_slots (court_id, slot_date, start_time, end_time, status, price_override) VALUES ?',
+        [slots], (err, result) => {
+          if (err) return res.status(500).json({ success: false, message: 'Tạo slot thất bại' });
+          res.json({ success: true, message: `Đã tạo ${result.affectedRows} slot từ ${start_date} đến ${end_date}`, count: result.affectedRows });
+        }
+      );
+    });
+  });
 });
 
 // PUT /api/courts/:courtId/slots/:slotId/close - Đóng slot (owner)

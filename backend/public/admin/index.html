@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SportBook Admin</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0f172a;--panel:#111c31;--panel2:#1e293b;--text:#f8fafc;--muted:#94a3b8;--line:rgba(255,255,255,.08);--green:#10b981;--blue:#3b82f6;--amber:#f59e0b;--red:#ef4444}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}.side{padding:24px;background:#0b1220;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}.brand{font-size:24px;font-weight:900;margin-bottom:4px}.muted{color:var(--muted);font-size:13px}.nav{margin-top:30px;display:grid;gap:8px}.nav button,.ghost{border:1px solid transparent;background:transparent;color:var(--muted);padding:12px 14px;border-radius:10px;text-align:left;font-weight:800;cursor:pointer}.nav button.active,.nav button:hover,.ghost:hover{background:rgba(16,185,129,.12);color:var(--green);border-color:rgba(16,185,129,.2)}
+    main{padding:28px;max-width:1220px;width:100%;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}h1{font-size:28px;margin:0}h2{font-size:18px;margin:28px 0 14px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}.metric{font-size:26px;font-weight:900;margin-top:8px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden}.row{display:grid;grid-template-columns:1.2fr 1fr .8fr .9fr;gap:12px;align-items:center;padding:14px 16px;border-top:1px solid var(--line)}.row:first-child{border-top:0}.row.head{background:rgba(255,255,255,.03);color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.pill{display:inline-flex;align-items:center;width:max-content;padding:5px 9px;border-radius:999px;background:rgba(148,163,184,.12);color:var(--muted);font-weight:800;font-size:12px}.pill.ok{background:rgba(16,185,129,.12);color:var(--green)}.pill.warn{background:rgba(245,158,11,.12);color:var(--amber)}.pill.bad{background:rgba(239,68,68,.12);color:var(--red)}.actions{display:flex;gap:8px;justify-content:flex-end}.btn{border:0;background:var(--green);color:#fff;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer}.btn.blue{background:var(--blue)}.btn.red{background:var(--red)}.btn:disabled{opacity:.6;cursor:wait}
+    input,select{width:100%;background:#0b1220;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:13px 14px;font-size:14px}.login{max-width:420px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px}.login h1{margin-bottom:8px}.login form{display:grid;gap:12px;margin-top:20px}.hidden{display:none!important}.error{color:var(--red);font-weight:800;font-size:13px}.toolbar{display:flex;gap:10px;align-items:center}.toolbar input{max-width:260px}.formgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formgrid label{display:grid;gap:8px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.note{margin-top:12px;color:var(--muted);font-size:13px;line-height:1.5}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}.side{position:static;height:auto}.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}.actions{justify-content:flex-start}}
+  </style>
+</head>
+<body>
+  <section id="login" class="login">
+    <h1>SportBook Admin</h1>
+    <p class="muted">Đăng nhập bằng tài khoản role admin.</p>
+    <form id="loginForm">
+      <input id="username" autocomplete="username" placeholder="Username, email hoặc SĐT" />
+      <input id="password" autocomplete="current-password" placeholder="Mật khẩu" type="password" />
+      <button class="btn" type="submit">Đăng nhập</button>
+      <div id="loginError" class="error"></div>
+    </form>
+  </section>
+
+  <section id="app" class="layout hidden">
+    <aside class="side">
+      <div class="brand">SportBook</div>
+      <div class="muted">Admin Console</div>
+      <div class="nav">
+        <button data-view="dashboard" class="active">Dashboard</button>
+        <button data-view="venues">Duyệt sân</button>
+        <button data-view="owners">Chủ sân</button>
+        <button data-view="users">Người dùng</button>
+        <button data-view="bookings">Booking</button>
+        <button data-view="payments">Thanh toán</button>
+        <button data-view="settings">Cấu hình</button>
+        <button id="logout" class="ghost">Đăng xuất</button>
+      </div>
+    </aside>
+    <main>
+      <div class="top">
+        <div>
+          <h1 id="title">Dashboard</h1>
+          <div class="muted" id="subtitle">Tổng quan hệ thống đặt sân</div>
+        </div>
+        <div class="toolbar">
+          <input id="search" placeholder="Tìm kiếm..." />
+          <button class="btn blue" id="refresh">Làm mới</button>
+        </div>
+      </div>
+      <div id="content"></div>
+    </main>
+  </section>
+
+  <script>
+    const API = '/api';
+    const state = { token: localStorage.getItem('sportbook_admin_token'), view: 'dashboard', stats: null };
+    const el = (id) => document.getElementById(id);
+    const money = (v) => new Intl.NumberFormat('vi-VN').format(Number(v || 0)) + 'đ';
+    const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${state.token}` });
+    async function api(path, options = {}) {
+      const res = await fetch(API + path, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.message || 'Request failed');
+      return data;
+    }
+    function showApp() {
+      el('login').classList.toggle('hidden', !!state.token);
+      el('app').classList.toggle('hidden', !state.token);
+      if (state.token) loadView();
+    }
+    el('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      el('loginError').textContent = '';
+      try {
+        const data = await fetch(API + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: el('username').value.trim(), password: el('password').value })
+        }).then(r => r.json());
+        if (!data.success) throw new Error(data.message || 'Đăng nhập thất bại');
+        if (data.user.role !== 'admin') throw new Error('Tài khoản không có quyền admin');
+        state.token = data.token;
+        localStorage.setItem('sportbook_admin_token', state.token);
+        showApp();
+      } catch (err) { el('loginError').textContent = err.message; }
+    });
+    document.querySelectorAll('.nav button[data-view]').forEach(btn => btn.addEventListener('click', () => {
+      state.view = btn.dataset.view;
+      document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b === btn));
+      loadView();
+    }));
+    el('logout').onclick = () => { localStorage.removeItem('sportbook_admin_token'); state.token = null; showApp(); };
+    el('refresh').onclick = () => loadView();
+    el('search').oninput = () => loadView();
+    function setHeader(title, subtitle) { el('title').textContent = title; el('subtitle').textContent = subtitle; }
+    function renderRows(headers, rows) {
+      return `<div class="panel"><div class="row head">${headers.map(h => `<div>${h}</div>`).join('')}</div>${rows.join('') || '<div class="row"><div class="muted">Không có dữ liệu</div></div>'}</div>`;
+    }
+    async function loadView() {
+      try {
+        if (state.view === 'dashboard') return renderDashboard();
+        if (state.view === 'venues') return renderVenues();
+        if (state.view === 'owners') return renderOwners();
+        if (state.view === 'users') return renderUsers();
+        if (state.view === 'bookings') return renderBookings();
+        if (state.view === 'payments') return renderPayments();
+        if (state.view === 'settings') return renderSettings();
+      } catch (err) {
+        el('content').innerHTML = `<div class="card error">${err.message}</div>`;
+      }
+    }
+    async function renderDashboard() {
+      setHeader('Dashboard', 'Tổng quan hệ thống đặt sân');
+      const { data } = await api('/admin/stats');
+      state.stats = data;
+      el('content').innerHTML = `
+        <div class="grid">
+          ${metric('Người dùng', data.totalUsers)}
+          ${metric('Chủ sân', data.totalOwners)}
+          ${metric('Sân', data.totalVenues)}
+          ${metric('Chờ duyệt', data.pendingVenues)}
+          ${metric('Booking hôm nay', data.todayBookings)}
+          ${metric('Tổng booking', data.totalBookings)}
+          ${metric('Doanh thu tháng', money(data.monthRevenue))}
+          ${metric('Tổng doanh thu', money(data.totalRevenue))}
+        </div>
+        <h2>Booking mới</h2>
+        ${renderRows(['Mã', 'Người đặt', 'Sân', 'Giá trị'], (data.recentBookings || []).map(b => `<div class="row"><div>#${b.booking_code}</div><div>${b.user_name || '-'}</div><div>${b.venue_name || '-'}</div><div>${money(b.total_price)}</div></div>`))}
+      `;
+    }
+    function metric(label, value) { return `<div class="card"><div class="muted">${label}</div><div class="metric">${value}</div></div>`; }
+    async function renderVenues() {
+      setHeader('Duyệt sân', 'Duyệt hoặc kiểm tra cụm sân trong hệ thống');
+      const q = el('search').value.trim().toLowerCase();
+      const { data } = await api('/admin/venues?limit=100');
+      const rows = data.filter(v => !q || `${v.name} ${v.owner_name} ${v.address}`.toLowerCase().includes(q)).map(v => `
+        <div class="row">
+          <div><strong>${v.name}</strong><div class="muted">${v.address || ''}</div></div>
+          <div>${v.owner_name || '-'}</div>
+          <div><span class="pill ${v.is_active ? 'ok' : 'warn'}">${v.is_active ? 'Đã duyệt' : 'Chờ duyệt'}</span></div>
+          <div class="actions">${!v.is_active ? `<button class="btn" onclick="approveVenue(${v.id})">Duyệt</button><button class="btn red" onclick="rejectVenue(${v.id})">Từ chối</button>` : ''}</div>
+        </div>`);
+      el('content').innerHTML = renderRows(['Sân', 'Chủ sân', 'Trạng thái', ''], rows);
+    }
+    async function renderUsers() {
+      setHeader('Người dùng', 'Quản lý user, owner và admin');
+      const q = encodeURIComponent(el('search').value.trim());
+      const { data } = await api('/admin/users?limit=100' + (q ? '&search=' + q : ''));
+      const rows = data.map(u => `<div class="row"><div><strong>${u.name}</strong><div class="muted">${u.email || u.phone || ''}</div></div><div>${u.username || '-'}</div><div><select onchange="setRole(${u.id}, this.value)">${['user','owner','admin','banned'].map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></div><div class="actions"><button class="btn red" onclick="toggleUser(${u.id})">${u.role === 'banned' ? 'Mở khóa' : 'Khóa'}</button></div></div>`);
+      el('content').innerHTML = renderRows(['Tên', 'Tài khoản', 'Role', ''], rows);
+    }
+    async function renderOwners() {
+      setHeader('Chủ sân', 'Xác minh hồ sơ chủ sân và năng lực vận hành');
+      const q = el('search').value.trim().toLowerCase();
+      const { data } = await api('/admin/owners?limit=100');
+      const rows = data.filter(o => !q || `${o.name} ${o.business_name} ${o.phone}`.toLowerCase().includes(q)).map(o => `<div class="row"><div><strong>${o.business_name || o.name}</strong><div class="muted">${o.phone || o.email || ''}</div></div><div>${o.venue_count || 0} sân<div class="muted">${o.booking_count || 0} booking</div></div><div><span class="pill ${o.status === 'approved' ? 'ok' : o.status === 'rejected' ? 'bad' : 'warn'}">${o.status || 'pending'}</span></div><div class="actions"><button class="btn" onclick="verifyOwner(${o.id})">Duyệt</button><button class="btn red" onclick="rejectOwner(${o.id})">Từ chối</button></div></div>`);
+      el('content').innerHTML = renderRows(['Chủ sân', 'Hoạt động', 'Trạng thái', ''], rows);
+    }
+    async function renderBookings() {
+      setHeader('Booking', 'Theo dõi đơn đặt sân');
+      const { data } = await api('/admin/bookings?limit=100');
+      const q = el('search').value.trim().toLowerCase();
+      const rows = data.filter(b => !q || `${b.booking_code} ${b.user_name} ${b.venue_name}`.toLowerCase().includes(q)).map(b => `<div class="row"><div><strong>#${b.booking_code}</strong><div class="muted">${b.user_name || ''} · ${b.user_phone || ''}</div></div><div>${b.venue_name || '-'}<div class="muted">${b.court_name || ''} · ${b.slot_date || ''}</div></div><div><span class="pill ${b.status === 'completed' ? 'ok' : b.status === 'cancelled' ? 'bad' : 'warn'}">${b.status}</span><div class="muted">${money(b.total_price)}</div></div><div class="actions"><button class="btn blue" onclick="setBookingStatus(${b.id}, 'confirmed')">Xác nhận</button><button class="btn" onclick="setBookingStatus(${b.id}, 'completed')">Hoàn thành</button><button class="btn red" onclick="setBookingStatus(${b.id}, 'cancelled')">Hủy</button></div></div>`);
+      el('content').innerHTML = renderRows(['Booking', 'Sân', 'Trạng thái', 'Giá trị'], rows);
+    }
+    async function renderPayments() {
+      setHeader('Thanh toán', 'Theo dõi giao dịch chuyển khoản và trạng thái payment');
+      const { data } = await api('/admin/payments?limit=100');
+      const q = el('search').value.trim().toLowerCase();
+      const rows = data.filter(p => !q || `${p.booking_code} ${p.user_name} ${p.venue_name}`.toLowerCase().includes(q)).map(p => `<div class="row"><div><strong>#${p.booking_code}</strong><div class="muted">${p.user_name || ''}</div></div><div>${p.venue_name || '-'}</div><div><span class="pill ${p.status === 'paid' ? 'ok' : p.status === 'failed' ? 'bad' : 'warn'}">${p.status}</span><div class="muted">${p.method || ''}</div></div><div>${money(p.amount)}</div></div>`);
+      el('content').innerHTML = renderRows(['Payment', 'Sân', 'Trạng thái', 'Số tiền'], rows);
+    }
+    async function renderSettings() {
+      setHeader('Cấu hình', 'Thiết lập tài khoản nhận tiền cho QR thanh toán');
+      const { data } = await api('/admin/payment-settings');
+      el('content').innerHTML = `<div class="card"><div class="formgrid"><label>Bank ID<input id="bankId" value="${data.bankId || ''}" placeholder="VD: 970436" /></label><label>Số tài khoản<input id="accountNo" value="${data.accountNo || ''}" placeholder="Số tài khoản nhận tiền" /></label><label>Tên người nhận<input id="accountName" value="${data.accountName || ''}" placeholder="SPORTBOOK" /></label></div><div class="note">QR VietQR sẽ dùng đúng số tiền booking, nội dung chuyển khoản dạng <strong>DAT SAN mã_đơn</strong>, và tài khoản nhận tiền ở đây.</div><div style="margin-top:16px"><button class="btn" onclick="saveSettings()">Lưu cấu hình thanh toán</button></div></div>`;
+    }
+    window.approveVenue = async (id) => { await api(`/admin/venues/${id}/approve`, { method: 'PUT' }); loadView(); };
+    window.rejectVenue = async (id) => { if (confirm('Từ chối và xóa yêu cầu sân này?')) { await api(`/admin/venues/${id}/reject`, { method: 'PUT', body: '{}' }); loadView(); } };
+    window.toggleUser = async (id) => { await api(`/admin/users/${id}/toggle`, { method: 'PUT' }); loadView(); };
+    window.setRole = async (id, role) => { await api(`/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }); loadView(); };
+    window.verifyOwner = async (id) => { await api(`/admin/owners/${id}/verify`, { method: 'PUT' }); loadView(); };
+    window.rejectOwner = async (id) => { await api(`/admin/owners/${id}/reject`, { method: 'PUT' }); loadView(); };
+    window.setBookingStatus = async (id, status) => { if (status !== 'cancelled' || confirm('Hủy booking này và mở lại slot?')) { await api(`/admin/bookings/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }); loadView(); } };
+    window.saveSettings = async () => { await api('/admin/payment-settings', { method: 'PUT', body: JSON.stringify({ bankId: el('bankId').value, accountNo: el('accountNo').value, accountName: el('accountName').value }) }); alert('Đã lưu cấu hình thanh toán'); loadView(); };
+    showApp();
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../api/axios';
+import api, { API_ORIGIN } from '../../api/axios';
 
 const FavoriteScreen = ({ navigation }) => {
   const [favorites, setFavorites] = useState([]);
@@ -24,9 +24,11 @@ const FavoriteScreen = ({ navigation }) => {
   };
 
   const renderCard = ({ item }) => {
-    const coverUrl = item.cover_image 
-      ? item.cover_image.replace('localhost', '192.168.1.107') 
-      : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=400';
+    const coverUrl = item.cover_image?.startsWith('http')
+      ? item.cover_image
+      : item.cover_image
+        ? `${API_ORIGIN}${item.cover_image}`
+        : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=400';
 
     return (
       <TouchableOpacity 

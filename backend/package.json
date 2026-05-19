@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/seeds/run.js"
+    "seed": "node src/seeds/run.js",
+    "migrate": "node src/seeds/migrate.js",
+    "demo:users": "node src/seeds/demo-user.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -16,11 +18,14 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-validator": "^7.2.0",
+    "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.11.0",
+    "nodemailer": "^8.0.7",
     "qrcode": "^1.5.4",
+    "twilio": "^6.0.2",
     "uuid": "^11.0.3"
   },
   "devDependencies": {

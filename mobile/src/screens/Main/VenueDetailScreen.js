@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../api/axios';
+import api, { API_ORIGIN } from '../../api/axios';
 
 const { width } = Dimensions.get('window');
 
@@ -67,8 +67,12 @@ const VenueDetailScreen = ({ route, navigation }) => {
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#10B981" /></View>;
   if (!venue) return <View style={styles.center}><Text style={{color:'#FFF'}}>Không tìm thấy sân</Text></View>;
 
-  const coverImg = venue.images?.[0]?.image_url?.replace('localhost', '192.168.1.107') 
-    || 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=1000&auto=format&fit=crop';
+  const coverPath = venue.images?.[0]?.image_url;
+  const coverImg = coverPath?.startsWith('http')
+    ? coverPath
+    : coverPath
+      ? `${API_ORIGIN}${coverPath}`
+      : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=1000&auto=format&fit=crop';
 
   const formatTime = (time) => (time ? time.slice(0, 5) : '06:00');
 

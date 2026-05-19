@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const authenticate = require('../middlewares/auth');
-const QRCode = require('qrcode');
+const { buildVietQR } = require('../utils/paymentConfig');
 
 // GET /api/payments/:bookingId/qr - Lấy QR code
 router.get('/:bookingId/qr', authenticate, async (req, res) => {
@@ -16,25 +16,18 @@ router.get('/:bookingId/qr', authenticate, async (req, res) => {
     }
 
     const payment = results[0];
-    const bankId = process.env.BANK_ID || '970436';
-    const accountNo = process.env.BANK_ACCOUNT || '1234567890';
-    const accountName = process.env.ACCOUNT_NAME || 'SPORTBOOK';
-    const description = `DAT SAN ${payment.booking_code}`;
-    const vietQRUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${payment.amount}&addInfo=${encodeURIComponent(description)}&accountName=${encodeURIComponent(accountName)}`;
-
-    const qrData = JSON.stringify({ bankId, accountNo, accountName, amount: payment.amount, description, bookingCode: payment.booking_code });
-    const qrImageBase64 = await QRCode.toDataURL(qrData, { width: 300, margin: 2 }).catch(() => null);
+    const paymentQr = await buildVietQR(payment.amount, payment.booking_code);
 
     res.json({
       success: true,
       data: {
         bookingCode: payment.booking_code,
-        amount: payment.amount,
+        amount: paymentQr.amount,
         status: payment.status,
-        vietQRUrl,
-        qrImageBase64,
-        bankInfo: { bankId, accountNo, accountName },
-        description
+        vietQRUrl: paymentQr.vietQRUrl,
+        qrImageBase64: paymentQr.qrImageBase64,
+        bankInfo: paymentQr.bankInfo,
+        description: paymentQr.description
       }
     });
   });

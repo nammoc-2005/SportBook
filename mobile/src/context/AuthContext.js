@@ -42,8 +42,9 @@ export const AuthProvider = ({ children }) => {
             await AsyncStorage.setItem('userInfo', JSON.stringify(res.data.user));
           }
         } catch (e) {
-          console.log('Token expired or invalid');
-          await logout();
+          if (e.response?.status === 401) {
+            await logout();
+          }
         }
       }
     } catch (e) {

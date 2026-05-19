@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../api/axios';
+import api, { API_ORIGIN } from '../../api/axios';
 
 const BookingHistoryScreen = ({ navigation }) => {
   const [bookings, setBookings] = useState([]);
@@ -62,9 +62,11 @@ const BookingHistoryScreen = ({ navigation }) => {
 
   const renderBookingCard = ({ item }) => {
     const status = getStatusInfo(item.status);
-    const coverUrl = item.venue_image 
-      ? item.venue_image.replace('localhost', '192.168.1.107') 
-      : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=200';
+    const coverUrl = item.venue_image?.startsWith('http')
+      ? item.venue_image
+      : item.venue_image
+        ? `${API_ORIGIN}${item.venue_image}`
+        : 'https://images.unsplash.com/photo-1595435064219-c80ce5444206?q=80&w=200';
 
     return (
       <TouchableOpacity 
@@ -74,11 +76,11 @@ const BookingHistoryScreen = ({ navigation }) => {
           if (item.status === 'pending') {
             navigation.navigate('PaymentQR', { 
               bookingData: { 
+                bookingId: item.id,
+                bookingCode: item.booking_code,
                 payment: { 
                   amount: item.total_price, 
-                  bank_name: 'Vietinbank',
-                  bank_account: '0852522818',
-                  transfer_content: 'DAT SAN ' + item.booking_code,
+                  description: 'DAT SAN ' + item.booking_code,
                   qrImageBase64: '' 
                 } 
               } 
@@ -160,7 +162,7 @@ const BookingHistoryScreen = ({ navigation }) => {
             <View style={styles.empty}>
               <Ionicons name="receipt-outline" size={80} color="#1E293B" />
               <Text style={styles.emptyText}>Bạn chưa có đơn đặt chỗ nào</Text>
-              <TouchableOpacity style={styles.bookBtn} onPress={() => navigation.navigate('HomeTab')}>
+              <TouchableOpacity style={styles.bookBtn} onPress={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}>
                 <LinearGradient colors={['#10B981', '#059669']} style={styles.bookBtnInner}>
                    <Text style={styles.bookBtnText}>Khám phá ngay</Text>
                 </LinearGradient>

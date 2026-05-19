@@ -9,44 +9,87 @@ import api from '../../api/axios';
 
 const { width, height } = Dimensions.get('window');
 
+const CATEGORIES = ['Tất cả', 'Bóng đá', 'Cầu lông', 'Pickleball', 'Tennis', 'Bóng rổ'];
+
 const MapScreen = ({ navigation }) => {
   const [venues, setVenues] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('Tất cả');
   const mapRef = useRef(null);
 
   useEffect(() => {
+    // 1. Lấy dữ liệu sân trước để bản đồ không trống
+    fetchVenues(activeCategory);
+
+    // 2. Cố gắng lấy vị trí ngầm và update lại
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        let location = await Location.getCurrentPositionAsync({});
-        const region = {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        };
-        setUserLocation(region);
-        fetchVenues(region);
-      } else {
-        const defaultRegion = { latitude: 21.0285, longitude: 105.8048, latitudeDelta: 0.1, longitudeDelta: 0.1 };
-        fetchVenues(defaultRegion);
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          let location = await Location.getLastKnownPositionAsync({});
+          if (!location) {
+             location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          }
+          if (location) {
+            const region = {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            };
+            setUserLocation(region);
+            if (mapRef.current) {
+              mapRef.current.animateToRegion(region, 1000);
+            }
+          }
+          
+          // Bật theo dõi vị trí liên tục với độ chính xác cao nhất để ép GPS hoạt động
+          const locationSub = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.BestForNavigation,
+              timeInterval: 2000,
+              distanceInterval: 1
+            },
+            (loc) => {
+               // Update state so the FAB button knows exactly where we are
+               setUserLocation({
+                 latitude: loc.coords.latitude,
+                 longitude: loc.coords.longitude,
+                 latitudeDelta: 0.01,
+                 longitudeDelta: 0.01,
+               });
+            }
+          );
+          
+          return () => {
+            if (locationSub) locationSub.remove();
+          };
+        }
+      } catch (e) {
+        console.log('Map location error:', e);
       }
     })();
   }, []);
 
-  const fetchVenues = async (region) => {
+  const fetchVenues = async (category) => {
     setLoading(true);
     try {
-      // In a real app, we would send the lat/lng/delta to filter by bounds
-      // For now, we fetch a larger set to simulate "filling the map"
-      const res = await api.get('/venues?limit=100');
+      let query = '/venues?limit=100';
+      if (category && category !== 'Tất cả') {
+        query += `&sport_type=${encodeURIComponent(category)}`;
+      }
+      const res = await api.get(query);
       if (res.data.success) {
         setVenues(res.data.data);
       }
     } catch (e) { console.log(e); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    fetchVenues(activeCategory);
+  }, [activeCategory]);
 
   const onRegionChangeComplete = (region) => {
     // Optionally fetch more data here if the user moves far enough
@@ -139,20 +182,48 @@ const MapScreen = ({ navigation }) => {
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
-          {['Gần tôi', 'Sân bóng đá', 'Sân cầu lông', 'Pickleball'].map((label, i) => (
-            <TouchableOpacity key={i} style={styles.chip}>
-              <Text style={styles.chipText}>{label}</Text>
-            </TouchableOpacity>
-          ))}
+          {CATEGORIES.map((label, i) => {
+            const isActive = activeCategory === label;
+            return (
+              <TouchableOpacity 
+                key={i} 
+                style={[styles.chip, isActive && styles.chipActive]}
+                onPress={() => setActiveCategory(label)}
+              >
+                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </SafeAreaView>
 
       <View style={styles.fabContainer}>
         <TouchableOpacity 
           style={styles.fab}
-          onPress={() => {
+          onPress={async () => {
             if (userLocation && mapRef.current) {
               mapRef.current.animateToRegion(userLocation, 1000);
+            } else {
+              try {
+                let { status } = await Location.requestForegroundPermissionsAsync();
+                if (status === 'granted') {
+                  let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+                  if (loc) {
+                    const region = {
+                      latitude: loc.coords.latitude,
+                      longitude: loc.coords.longitude,
+                      latitudeDelta: 0.02,
+                      longitudeDelta: 0.02,
+                    };
+                    setUserLocation(region);
+                    if (mapRef.current) {
+                      mapRef.current.animateToRegion(region, 1000);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.log(e);
+              }
             }
           }}
         >
@@ -172,7 +243,9 @@ const styles = StyleSheet.create({
   syncBtn: { padding: 5 },
   chipsScroll: { marginTop: 15 },
   chip: { backgroundColor: 'rgba(30, 41, 59, 0.9)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginRight: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  chipActive: { backgroundColor: '#10B981', borderColor: '#10B981' },
   chipText: { color: '#CBD5E1', fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: '#FFF' },
   customMarker: { alignItems: 'center' },
   markerInner: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FFF', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
   markerArrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#10B981', marginTop: -2 },

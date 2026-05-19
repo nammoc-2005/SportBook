@@ -4,18 +4,7 @@ const db = require('../config/db');
 const authenticate = require('../middlewares/auth');
 const requireRole = require('../middlewares/role');
 const { v4: uuidv4 } = require('uuid');
-const QRCode = require('qrcode');
-
-const generateVietQR = async (amount, bookingCode) => {
-  const bankId = process.env.BANK_ID || '970436';
-  const accountNo = process.env.BANK_ACCOUNT || '1234567890';
-  const accountName = process.env.ACCOUNT_NAME || 'SPORTBOOK';
-  const description = `DAT SAN ${bookingCode}`;
-  const vietQRUrl = `https://img.vietqr.io/image/${bankId}-${accountNo}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(description)}&accountName=${encodeURIComponent(accountName)}`;
-  const qrData = JSON.stringify({ bankId, accountNo, accountName, amount, description, bookingCode });
-  const qrImageBase64 = await QRCode.toDataURL(qrData, { width: 300, margin: 2 }).catch(() => null);
-  return { vietQRUrl, qrImageBase64, qrData };
-};
+const { buildVietQR } = require('../utils/paymentConfig');
 
 function queryAsync(conn, sql, params) {
   return new Promise((resolve, reject) => {
@@ -88,7 +77,7 @@ router.post('/', authenticate, (req, res) => {
         await queryAsync(conn, `INSERT INTO notifications (user_id, booking_id, type, title, message) VALUES (?, ?, 'booking', ?, ?)`,
           [req.user.id, bookingId, '🏟️ Đặt sân thành công!', `Đã đặt ${slot.court_name} tại ${slot.venue_name}. Mã: ${bookingCode}`]);
 
-        const { vietQRUrl, qrImageBase64 } = await generateVietQR(totalPrice, bookingCode);
+        const paymentQr = await buildVietQR(totalPrice, bookingCode);
 
         conn.commit((err) => {
           conn.release();
@@ -100,7 +89,7 @@ router.post('/', authenticate, (req, res) => {
               bookingId, bookingCode, totalPrice, discountAmt,
               slotInfo: { date: slot.slot_date, startTime: slot.start_time, endTime: slot.end_time },
               courtName: slot.court_name, venueName: slot.venue_name,
-              payment: { vietQRUrl, qrImageBase64, amount: totalPrice }
+              payment: paymentQr
             }
           });
         });
@@ -192,9 +181,11 @@ router.get('/:id', authenticate, async (req, res) => {
     const booking = results[0];
 
     if (booking.payment_amount && booking.booking_code) {
-      const { vietQRUrl, qrImageBase64 } = await generateVietQR(booking.payment_amount, booking.booking_code);
-      booking.vietQRUrl = vietQRUrl;
-      booking.qrImageBase64 = qrImageBase64;
+      const paymentQr = await buildVietQR(booking.payment_amount, booking.booking_code);
+      booking.vietQRUrl = paymentQr.vietQRUrl;
+      booking.qrImageBase64 = paymentQr.qrImageBase64;
+      booking.bankInfo = paymentQr.bankInfo;
+      booking.description = paymentQr.description;
     }
     res.json({ success: true, data: booking });
   });
@@ -220,18 +211,44 @@ router.put('/:id/cancel', authenticate, (req, res) => {
 
 // PUT /api/bookings/:id/confirm (owner)
 router.put('/:id/confirm', authenticate, requireRole('owner', 'admin'), (req, res) => {
-  db.query("UPDATE bookings SET status = 'confirmed', confirmed_at = NOW() WHERE id = ?", [req.params.id], (err) => {
-    if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
-    db.query("UPDATE payments SET status = 'paid', paid_at = NOW() WHERE booking_id = ?", [req.params.id], () => {});
-    res.json({ success: true, message: 'Đã xác nhận đặt sân' });
+  const ownerClause = req.user.role === 'admin' ? '' : 'AND v.owner_id = ?';
+  const params = req.user.role === 'admin' ? [req.params.id] : [req.params.id, req.user.id];
+
+  db.query(`
+    SELECT b.id FROM bookings b
+    JOIN courts c ON c.id = b.court_id
+    JOIN venues v ON v.id = c.venue_id
+    WHERE b.id = ? ${ownerClause}`,
+    params, (findErr, rows) => {
+    if (findErr) return res.status(500).json({ success: false, message: 'Lỗi' });
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn thuộc sân của bạn' });
+
+    db.query("UPDATE bookings SET status = 'confirmed', confirmed_at = NOW() WHERE id = ?", [req.params.id], (err) => {
+      if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
+      db.query("UPDATE payments SET status = 'paid', paid_at = NOW() WHERE booking_id = ?", [req.params.id], () => {});
+      res.json({ success: true, message: 'Đã xác nhận đặt sân' });
+    });
   });
 });
 
 // PUT /api/bookings/:id/complete (owner)
 router.put('/:id/complete', authenticate, requireRole('owner', 'admin'), (req, res) => {
-  db.query("UPDATE bookings SET status = 'completed' WHERE id = ?", [req.params.id], (err) => {
-    if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
-    res.json({ success: true, message: 'Đã hoàn thành' });
+  const ownerClause = req.user.role === 'admin' ? '' : 'AND v.owner_id = ?';
+  const params = req.user.role === 'admin' ? [req.params.id] : [req.params.id, req.user.id];
+
+  db.query(`
+    SELECT b.id FROM bookings b
+    JOIN courts c ON c.id = b.court_id
+    JOIN venues v ON v.id = c.venue_id
+    WHERE b.id = ? ${ownerClause}`,
+    params, (findErr, rows) => {
+    if (findErr) return res.status(500).json({ success: false, message: 'Lỗi' });
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn thuộc sân của bạn' });
+
+    db.query("UPDATE bookings SET status = 'completed' WHERE id = ?", [req.params.id], (err) => {
+      if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
+      res.json({ success: true, message: 'Đã hoàn thành' });
+    });
   });
 });
 

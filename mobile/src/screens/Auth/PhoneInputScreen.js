@@ -5,19 +5,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../api/axios';
 
-const PhoneInputScreen = ({ navigation }) => {
+const PhoneInputScreen = ({ navigation, route }) => {
+  const purpose = route.params?.purpose || 'login';
+  const isReset = purpose === 'reset';
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSendOTP = async () => {
     Keyboard.dismiss();
-    if (!phone || phone.length < 9) return Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại');
+    const normalized = phone.trim().replace(/\s/g, '');
+    if (!normalized || normalized.length < 9) return Alert.alert('Lỗi', 'Vui lòng nhập số điện thoại hợp lệ');
     setLoading(true);
     try {
-      const res = await api.post('/auth/send-otp', { phone });
-      if (res.data.success) navigation.navigate('OTP', { phone });
+      const res = await api.post('/auth/send-otp', { phone: normalized });
+      if (res.data.success) navigation.navigate('OTP', { phone: normalized, purpose });
     } catch (error) {
-      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể gửi OTP');
+      Alert.alert('Lỗi', error.response?.data?.message || error.userMessage || 'Không thể gửi OTP');
     } finally {
       setLoading(false);
     }
@@ -33,8 +36,10 @@ const PhoneInputScreen = ({ navigation }) => {
               <Ionicons name="chevron-back" size={28} color="#FFF" />
             </TouchableOpacity>
             <View style={styles.header}>
-              <Text style={styles.title}>Quên mật khẩu / Đăng ký</Text>
-              <Text style={styles.subtitle}>Chúng tôi sẽ gửi mã OTP qua tin nhắn</Text>
+              <Text style={styles.title}>{isReset ? 'Quên mật khẩu' : 'Đăng nhập OTP'}</Text>
+              <Text style={styles.subtitle}>
+                {isReset ? 'Nhập SĐT đã đăng ký để đặt lại mật khẩu' : 'Nhập SĐT để nhận mã xác thực 6 số'}
+              </Text>
             </View>
           </SafeAreaView>
         </LinearGradient>
