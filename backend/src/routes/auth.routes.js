@@ -828,200 +828,7 @@ const storage = multer.diskStorage({
     cb(null, `avatar_${req.user.id}_${Date.now()}${path.extname(file.originalname)}`);
   },
 });
-  let decoded;
-  try {
-    decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ success: false, message: 'Phiên đăng ký hết hạn. Vui lòng nhập OTP lại.' });
-  }
 
-  if (decoded.type !== 'register' || !decoded.phone) {
-    return res.status(401).json({ success: false, message: 'Token không hợp lệ' });
-  }
-
-  const phone = decoded.phone;
-  const username = `user_${phone.replace(/\D/g, '').slice(-9)}`;
-  const hashedPw = password ? await bcrypt.hash(password, 10) : null;
-
-  try {
-    const [existing] = await db.query('SELECT id FROM users WHERE phone = ?', [phone]);
-    if (existing.length > 0) {
-      return res.status(409).json({ success: false, message: 'Số điện thoại đã được đăng ký' });
-    }
-
-    const [result] = await db.query(
-      `INSERT INTO users (username, phone, name, email, password_hash, role, auth_provider, phone_verified, email_verified)
-       VALUES (?, ?, ?, ?, ?, "user", "phone", 1, 0)`,
-      [username, phone, name, email || null, hashedPw]
-    );
-
-    const userId = result.insertId;
-    const token = signToken(userId, 'user');
-    res.status(201).json({
-      success: true,
-      message: 'Đăng ký thành công!',
-      token,
-      user: {
-        id: userId,
-        username,
-        phone,
-        name,
-        email: email || null,
-        role: 'user',
-        avatar: null,
-        phone_verified: 1,
-        email_verified: 0,
-      },
-    });
-  } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ success: false, message: 'Tài khoản đã tồn tại' });
-    }
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Đăng ký thất bại' });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/auth/register
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/register', async (req, res) => {
-  const { username, password, name, email, phone, role = 'user' } = req.body;
-  if (!username || !password || !name)
-    return res.status(400).json({ success: false, message: 'Thiếu thông tin bắt buộc (username, password, name)' });
-
-  const userRole = ['user', 'owner'].includes(role) ? role : 'user';
-  const hashedPw = await bcrypt.hash(password, 10);
-
-  try {
-    const [result] = await db.query(
-      'INSERT INTO users (username, phone, name, email, password_hash, role, phone_verified, email_verified) VALUES (?, ?, ?, ?, ?, ?, 0, 0)',
-      [username, phone || null, name, email || null, hashedPw, userRole]
-    );
-
-    const userId = result.insertId;
-
-    if (userRole === 'owner') {
-      await db.query(
-        'INSERT INTO court_owners (user_id, business_name, status) VALUES (?, ?, "pending")',
-        [userId, name]
-      );
-    }
-
-    const token = signToken(userId, userRole);
-    res.status(201).json({
-      success: true, message: 'Đăng ký thành công!', token,
-      user: { id: userId, username, phone: phone || null, name, email: email || null, role: userRole, avatar: null, phone_verified: 0, email_verified: 0 },
-    });
-  } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      if (err.sqlMessage.includes('username')) return res.status(409).json({ success: false, message: 'Tài khoản đã tồn tại' });
-      if (err.sqlMessage.includes('phone')) return res.status(409).json({ success: false, message: 'Số điện thoại đã được sử dụng' });
-      if (err.sqlMessage.includes('email')) return res.status(409).json({ success: false, message: 'Email đã được sử dụng' });
-    }
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Đăng ký thất bại', error: err.message });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/auth/reset-password
-// ─────────────────────────────────────────────────────────────────────────────
-router.post('/reset-password', async (req, res) => {
-  const { tempToken, newPassword } = req.body;
-  if (!tempToken || !newPassword)
-    return res.status(400).json({ success: false, message: 'Thiếu thông tin' });
-
-  let decoded;
-  try {
-    decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ success: false, message: 'Token không hợp lệ hoặc hết hạn' });
-  }
-
-  if (decoded.type !== 'reset')
-    return res.status(401).json({ success: false, message: 'Token không hợp lệ' });
-
-  try {
-    const hashedPw = await bcrypt.hash(newPassword, 10);
-    await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPw, decoded.userId]);
-    res.json({ success: true, message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Đổi mật khẩu thất bại' });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/auth/me
-// ─────────────────────────────────────────────────────────────────────────────
-const authenticate = require('../middlewares/auth');
-
-router.get('/me', authenticate, async (req, res) => {
-  try {
-    const [results] = await db.query(
-      `SELECT u.id, u.username, u.phone, u.name, u.email, u.role, u.avatar_url as avatar,
-        u.created_at, u.phone_verified, u.email_verified,
-        co.id as owner_id, co.business_name, co.bank_account, co.bank_name, co.status as owner_status
-       FROM users u LEFT JOIN court_owners co ON co.user_id = u.id WHERE u.id = ?`,
-      [req.user.id]
-    );
-
-    if (!results.length) return res.status(404).json({ success: false, message: 'Not found' });
-
-    const u = results[0];
-    res.json({
-      success: true,
-      user: {
-        id: u.id, username: u.username, phone: u.phone, name: u.name,
-        email: u.email, role: u.role, avatar: u.avatar, created_at: u.created_at,
-        phone_verified: u.phone_verified, email_verified: u.email_verified,
-        ownerProfile: u.owner_id ? {
-          id: u.owner_id, businessName: u.business_name,
-          bankAccount: u.bank_account, bankName: u.bank_name, status: u.owner_status,
-        } : null,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'DB error' });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/auth/profile
-// ─────────────────────────────────────────────────────────────────────────────
-router.put('/profile', authenticate, async (req, res) => {
-  const { name, email, avatar_url } = req.body;
-  try {
-    await db.query(
-      'UPDATE users SET name = ?, email = ?, avatar_url = ? WHERE id = ?',
-      [name || req.user.name, email || req.user.email, avatar_url || null, req.user.id]
-    );
-    res.json({ success: true, message: 'Cập nhật hồ sơ thành công' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Update failed' });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/auth/avatar
-// ─────────────────────────────────────────────────────────────────────────────
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../../uploads/avatars');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `avatar_${req.user.id}_${Date.now()}${path.extname(file.originalname)}`);
-  },
-});
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
@@ -1037,9 +844,6 @@ router.post('/avatar', authenticate, upload.single('avatar'), async (req, res) =
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/auth/change-password
-// ─────────────────────────────────────────────────────────────────────────────
 router.post('/change-password', authenticate, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
@@ -1056,7 +860,6 @@ router.post('/change-password', authenticate, async (req, res) => {
     }
 
     if (!user.password_hash) {
-       // Just set new password if they didn't have one
        const hashedPw = await bcrypt.hash(newPassword, 10);
        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPw, req.user.id]);
        return res.json({ success: true, message: 'Đổi mật khẩu thành công' });
