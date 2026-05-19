@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const authenticate = require('../middlewares/auth');
 const requireRole = require('../middlewares/role');
+const { getPaymentConfig, savePaymentConfig } = require('../utils/paymentConfig');
 
 // All admin routes require auth + admin role
 router.use(authenticate, requireRole('admin'));
@@ -65,6 +66,34 @@ router.get('/users', (req, res) => {
   });
 });
 
+// GET /api/admin/owners
+router.get('/owners', (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query;
+  const conditions = ['u.role = "owner"'];
+  const params = [];
+  if (status) { conditions.push('co.status = ?'); params.push(status); }
+
+  db.query(`
+    SELECT co.*, u.name, u.username, u.phone, u.email,
+      COUNT(DISTINCT v.id) as venue_count,
+      COUNT(DISTINCT b.id) as booking_count
+    FROM users u
+    LEFT JOIN court_owners co ON co.user_id = u.id
+    LEFT JOIN venues v ON v.owner_id = u.id
+    LEFT JOIN courts c ON c.venue_id = v.id
+    LEFT JOIN bookings b ON b.court_id = c.id
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY u.id, co.id
+    ORDER BY co.created_at DESC, u.created_at DESC
+    LIMIT ? OFFSET ?`,
+    [...params, parseInt(limit), (parseInt(page) - 1) * parseInt(limit)],
+    (err, results) => {
+      if (err) return res.status(500).json({ success: false, message: 'DB error' });
+      res.json({ success: true, data: results });
+    }
+  );
+});
+
 // PUT /api/admin/users/:id/toggle - Khoá/mở tài khoản (dùng is_verified làm cờ active)
 router.put('/users/:id/toggle', (req, res) => {
   // Note: actual schema has is_verified, not is_active. We use role = 'banned' or keep as is.
@@ -77,6 +106,27 @@ router.put('/users/:id/toggle', (req, res) => {
       if (err2) return res.status(500).json({ success: false, message: 'Lỗi' });
       res.json({ success: true, message: newRole === 'banned' ? 'Đã khoá tài khoản' : 'Đã mở tài khoản', role: newRole });
     });
+  });
+});
+
+// PUT /api/admin/users/:id/role
+router.put('/users/:id/role', (req, res) => {
+  const { role } = req.body;
+  if (!['user', 'owner', 'admin', 'banned'].includes(role)) {
+    return res.status(400).json({ success: false, message: 'Role không hợp lệ' });
+  }
+
+  db.query('UPDATE users SET role = ? WHERE id = ?', [role, req.params.id], (err) => {
+    if (err) return res.status(500).json({ success: false, message: 'Lỗi cập nhật role' });
+    if (role === 'owner') {
+      db.query(
+        `INSERT IGNORE INTO court_owners (user_id, business_name, status)
+         SELECT id, name, 'pending' FROM users WHERE id = ?`,
+        [req.params.id],
+        () => {}
+      );
+    }
+    res.json({ success: true, message: 'Đã cập nhật role', role });
   });
 });
 
@@ -152,11 +202,98 @@ router.get('/bookings', (req, res) => {
   });
 });
 
+// PUT /api/admin/bookings/:id/status
+router.put('/bookings/:id/status', (req, res) => {
+  const { status, cancel_reason } = req.body;
+  if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(status)) {
+    return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ' });
+  }
+
+  const fields = ['status = ?'];
+  const params = [status];
+  if (status === 'confirmed') fields.push('confirmed_at = COALESCE(confirmed_at, NOW())');
+  if (status === 'cancelled') {
+    fields.push('cancelled_at = COALESCE(cancelled_at, NOW())');
+    fields.push('cancel_reason = ?');
+    params.push(cancel_reason || 'Admin cập nhật');
+  }
+  params.push(req.params.id);
+
+  db.query(`UPDATE bookings SET ${fields.join(', ')} WHERE id = ?`, params, (err) => {
+    if (err) return res.status(500).json({ success: false, message: 'Không cập nhật được booking' });
+
+    if (status === 'confirmed') {
+      db.query("UPDATE payments SET status = 'paid', paid_at = COALESCE(paid_at, NOW()) WHERE booking_id = ?", [req.params.id], () => {});
+    }
+    if (status === 'cancelled') {
+      db.query(`
+        UPDATE time_slots ts
+        JOIN bookings b ON b.slot_id = ts.id
+        SET ts.status = 'open'
+        WHERE b.id = ?`, [req.params.id], () => {});
+    }
+
+    res.json({ success: true, message: 'Đã cập nhật trạng thái booking' });
+  });
+});
+
+// GET /api/admin/payments
+router.get('/payments', (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query;
+  const conditions = [];
+  const params = [];
+  if (status) { conditions.push('p.status = ?'); params.push(status); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  db.query(`
+    SELECT p.*, b.booking_code, b.status as booking_status,
+      u.name as user_name, u.phone as user_phone,
+      v.name as venue_name
+    FROM payments p
+    JOIN bookings b ON b.id = p.booking_id
+    JOIN users u ON u.id = b.user_id
+    JOIN courts c ON c.id = b.court_id
+    JOIN venues v ON v.id = c.venue_id
+    ${where}
+    ORDER BY p.id DESC
+    LIMIT ? OFFSET ?`,
+    [...params, parseInt(limit), (parseInt(page) - 1) * parseInt(limit)],
+    (err, results) => {
+      if (err) return res.status(500).json({ success: false, message: 'DB error' });
+      res.json({ success: true, data: results });
+    }
+  );
+});
+
+// GET /api/admin/payment-settings
+router.get('/payment-settings', async (req, res) => {
+  const config = await getPaymentConfig();
+  res.json({ success: true, data: config });
+});
+
+// PUT /api/admin/payment-settings
+router.put('/payment-settings', async (req, res) => {
+  try {
+    const config = await savePaymentConfig(req.body);
+    res.json({ success: true, message: 'Đã lưu cấu hình thanh toán', data: config });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, message: err.message || 'Không lưu được cấu hình' });
+  }
+});
+
 // PUT /api/admin/owners/:id/verify
 router.put('/owners/:id/verify', (req, res) => {
   db.query("UPDATE court_owners SET status = 'approved' WHERE id = ?", [req.params.id], (err) => {
     if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
     res.json({ success: true, message: 'Đã xác minh chủ sân' });
+  });
+});
+
+// PUT /api/admin/owners/:id/reject
+router.put('/owners/:id/reject', (req, res) => {
+  db.query("UPDATE court_owners SET status = 'rejected' WHERE id = ?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ success: false, message: 'Lỗi' });
+    res.json({ success: true, message: 'Đã từ chối chủ sân' });
   });
 });
 

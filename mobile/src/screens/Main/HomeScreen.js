@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
-import api from '../../api/axios';
+import api, { API_ORIGIN } from '../../api/axios';
 import { AuthContext } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -24,6 +24,7 @@ const HomeScreen = ({ navigation }) => {
   const [activeArea, setActiveArea] = useState('Gần tôi');
   const [userLocation, setUserLocation] = useState(null);
   const [searchText, setSearchText] = useState('');
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -32,56 +33,77 @@ const HomeScreen = ({ navigation }) => {
     return 'Chào buổi tối,';
   };
 
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        let location = await Location.getCurrentPositionAsync({});
-        setUserLocation(location.coords);
-      } else {
-        fetchVenues();
-        fetchNearby();
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (userLocation || activeCategory !== 'Tất cả' || activeArea !== 'Gần tôi' || searchText) {
-        fetchVenues();
-      }
-    }, 500); // Debounce search
-    return () => clearTimeout(timer);
-  }, [userLocation, activeCategory, activeArea, searchText]);
-
-  const fetchNearby = async () => {
+  const fetchNearby = async (loc) => {
     try {
       let query = '/venues?limit=10&sort=nearest';
-      if (userLocation) {
-        query += `&lat=${userLocation.latitude}&lng=${userLocation.longitude}`;
+      if (loc) {
+        query += `&lat=${loc.latitude}&lng=${loc.longitude}`;
       }
       const res = await api.get(query);
       if (res.data.success) setNearbyVenues(res.data.data.slice(0, 5));
     } catch (e) { console.log('fetchNearby error:', e); }
   };
 
-  const fetchVenues = async () => {
+  const fetchVenues = async (loc, category, area, search) => {
     setLoading(true);
     try {
       let query = '/venues?limit=30';
-      if (activeCategory !== 'Tất cả') query += `&sport_type=${encodeURIComponent(activeCategory)}`;
-      if (activeArea === 'Hà Nội') query += '&city=Hà Nội';
-      if (activeArea === 'Hồ Chí Minh') query += '&city=Hồ Chí Minh';
-      if (searchText) query += `&search=${encodeURIComponent(searchText)}`;
-      if (userLocation) {
-        query += `&lat=${userLocation.latitude}&lng=${userLocation.longitude}`;
-        if (activeArea === 'Gần tôi') query += '&sort=nearest';
+      if (category && category !== 'Tất cả') query += `&sport_type=${encodeURIComponent(category)}`;
+      if (area === 'Hà Nội') query += '&city=Hà Nội';
+      if (area === 'Hồ Chí Minh') query += '&city=Hồ Chí Minh';
+      if (search) query += `&search=${encodeURIComponent(search)}`;
+      if (loc) {
+        query += `&lat=${loc.latitude}&lng=${loc.longitude}`;
+        if (area === 'Gần tôi') query += '&sort=nearest';
       }
       const res = await api.get(query);
       if (res.data.success) setAllVenues(res.data.data);
     } catch (e) { console.log('fetchVenues error:', e); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    // 1. Fetch immediately with default state to show UI fast
+    fetchVenues(null, activeCategory, activeArea, searchText);
+    fetchNearby(null);
+
+    // 2. Try getting location in background
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          // Use getLastKnownPositionAsync for instant response, if null fallback to getCurrentPositionAsync
+          let location = await Location.getLastKnownPositionAsync({});
+          if (!location) {
+             location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          }
+          if (location) {
+            setUserLocation(location.coords);
+          }
+          
+          // Request high accuracy in background so the map's blue dot becomes precise later
+          let accurateLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+          if (accurateLocation) {
+            setUserLocation(accurateLocation.coords);
+          }
+        }
+      } catch (e) {
+        console.log('Location error:', e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (initialLoad) {
+      setInitialLoad(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchVenues(userLocation, activeCategory, activeArea, searchText);
+      fetchNearby(userLocation);
+    }, 500); // Debounce search
+    return () => clearTimeout(timer);
+  }, [userLocation, activeCategory, activeArea, searchText]);
 
   // Parse sport_types array -> lấy loại đầu tiên
   const getSportLabel = (item) => {
@@ -123,8 +145,10 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const getImageUrl = (item) =>
-    item.cover_image
-      ? item.cover_image.replace('localhost', '192.168.1.107')
+    item.cover_image?.startsWith('http')
+      ? item.cover_image
+      : item.cover_image
+        ? `${API_ORIGIN}${item.cover_image}`
       : 'https://images.unsplash.com/photo-1551958219-acbc630e2914?q=80&w=800&auto=format&fit=crop';
 
   const formatPrice = (price) =>
@@ -257,7 +281,7 @@ const HomeScreen = ({ navigation }) => {
                   uri: userInfo?.avatar?.includes('http')
                     ? userInfo.avatar
                     : userInfo?.avatar
-                      ? `http://192.168.1.107:5000${userInfo.avatar}`
+                      ? `${API_ORIGIN}${userInfo.avatar}`
                       : `https://ui-avatars.com/api/?name=${encodeURIComponent(userInfo?.name || 'U')}&background=10B981&color=fff`
                 }}
                 style={styles.avatar}

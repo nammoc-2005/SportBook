@@ -1,7 +1,9 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "SportBook",
+    "slug": "sportbook",
+    "scheme": "sportbook",
+    "owner": "dangdm",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,17 +15,30 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dangdm.sportbook"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.dangdm.sportbook"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-font"
+    ],
+    "extra": {
+      "apiUrl": "http://172.20.10.2:5000/api",
+      "googleExpoRedirectUri": "https://auth.expo.io/@dangdm/sportbook",
+      "eas": {
+        "projectId": "de7d2d63-e3d0-4b3c-b533-22328d657b7b"
+      }
     }
   }
 }

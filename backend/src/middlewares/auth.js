@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -9,20 +9,34 @@ const authenticate = (req, res, next) => {
     return res.status(401).json({ success: false, message: 'Access token required' });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const [results] = await db.query('SELECT * FROM users WHERE id = ?', [decoded.userId]);
+
+    if (!results.length) {
+      return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    db.query('SELECT id, phone, name, email, role, avatar_url, is_verified FROM users WHERE id = ?', [decoded.userId], (err, results) => {
-      if (err || results.length === 0) {
-        return res.status(401).json({ success: false, message: 'User not found' });
-      }
+    const u = results[0];
+    if (u.role === 'banned') {
+      return res.status(403).json({ success: false, message: 'Tài khoản đã bị khóa' });
+    }
 
-      req.user = results[0];
-      next();
-    });
-  });
+    req.user = {
+      id: u.id,
+      username: u.username,
+      phone: u.phone,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      avatar_url: u.avatar_url,
+      phone_verified: u.phone_verified ?? u.is_verified ?? 0,
+      email_verified: u.email_verified ?? 0,
+    };
+    next();
+  } catch (err) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
 };
 
 module.exports = authenticate;

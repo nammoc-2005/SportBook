@@ -117,18 +117,60 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>Quản lý tài khoản</Text>
           <View style={styles.menuBox}>
-            <MenuRow icon="person-outline" label="Thông tin cá nhân" color="#10B981" />
-            <MenuRow icon="card-outline" label="Phương thức thanh toán" color="#3B82F6" />
-            <MenuRow icon="shield-outline" label="Bảo mật & Quyền riêng tư" color="#6366F1" />
+            {['owner', 'admin'].includes(userInfo?.role) && (
+              <MenuRow
+                icon="business-outline"
+                label="Quản lý sân của tôi"
+                color="#10B981"
+                onPress={() => navigation.navigate('OwnerDashboard')}
+              />
+            )}
+            <MenuRow 
+              icon="person-outline" 
+              label="Thông tin cá nhân" 
+              color="#10B981" 
+              onPress={() => navigation.navigate('EditProfile')}
+            />
+            {!userInfo?.phone_verified && (
+              <MenuRow
+                icon="phone-portrait-outline"
+                label="Xác thực số điện thoại"
+                color="#10B981"
+                onPress={() => navigation.navigate('VerifyPhone')}
+              />
+            )}
+            {userInfo?.email && !userInfo?.email_verified && (
+              <MenuRow
+                icon="mail-outline"
+                label="Xác thực email"
+                color="#3B82F6"
+                onPress={() => navigation.navigate('VerifyEmail')}
+              />
+            )}
+            <MenuRow 
+              icon="card-outline" 
+              label="Phương thức thanh toán" 
+              color="#3B82F6" 
+              onPress={() => navigation.navigate('PaymentMethods')}
+            />
+            <MenuRow 
+              icon="shield-outline" 
+              label="Bảo mật & Quyền riêng tư" 
+              color="#6366F1" 
+              onPress={() => navigation.navigate('Security')}
+            />
           </View>
         </View>
 
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>Cài đặt hệ thống</Text>
           <View style={styles.menuBox}>
-            <MenuRow icon="language-outline" label="Ngôn ngữ" />
+            <MenuRow 
+              icon="settings-outline" 
+              label="Tùy chọn & Cài đặt" 
+              onPress={() => navigation.navigate('Settings')}
+            />
             <MenuRow icon="help-circle-outline" label="Trung tâm trợ giúp" />
-            <MenuRow icon="document-text-outline" label="Chính sách sử dụng" />
           </View>
         </View>
 

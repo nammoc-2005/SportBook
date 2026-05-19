@@ -15,17 +15,20 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
 
 // Test DB connection on startup
 const db = require('./config/db');
-db.getConnection((err, connection) => {
-  if (err) {
-    console.error('❌ Database connection failed:', err.message);
-  } else {
+(async () => {
+  try {
+    const conn = await db.getConnection();
     console.log('✅ Database connected successfully!');
-    connection.release();
+    conn.release();
+  } catch (err) {
+    console.error('❌ Database connection failed:', err.message);
+    console.error('   → Kiểm tra MySQL đang chạy và file .env (DB_HOST, DB_NAME, DB_USER)');
   }
-});
+})();
 
 // Routes
 app.use('/api/auth', require('./routes/auth.routes'));
