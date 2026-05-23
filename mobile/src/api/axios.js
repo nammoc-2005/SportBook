@@ -2,7 +2,17 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-const API_BASE_URL = 'http://192.168.1.107:5000/api';
+// Tự động phát hiện địa chỉ IP máy tính đang chạy Expo (Không bao giờ cần sửa tay khi đổi mạng Wi-Fi!)
+const getDevApiUrl = () => {
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0]; // Cắt bỏ phần cổng :8081 để lấy IP máy tính
+    return `http://${ip}:5000/api`;
+  }
+  return 'http://172.20.10.2:5000/api'; // IP dự phòng
+};
+
+const API_BASE_URL = getDevApiUrl();
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 const api = axios.create({

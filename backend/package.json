@@ -1,13 +1,13 @@
 {
   "name": "sportbook-backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "SportBook - Hệ thống đặt sân thể thao API",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/seeds/run.js",
     "migrate": "node src/seeds/migrate.js",
+    "seed": "node src/seeds/run.js",
     "demo:users": "node src/seeds/demo-user.js"
   },
   "dependencies": {
